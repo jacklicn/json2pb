@@ -138,8 +138,9 @@ static json_t * _pb2json(const Message& msg)
 	return _auto.release();
 }
 
-static void _json2pb(Message& msg, json_t *root);
-static void _json2field(Message &msg, const FieldDescriptor *field, json_t *jf)
+static void _json2pb(Message& msg, json_t *root, bool allow_unknown_field);
+
+static void _json2field(Message &msg, const FieldDescriptor *field, json_t *jf, bool allow_unknown_field)
 {
 	const Reflection *ref = msg.GetReflection();
 	const bool repeated = field->is_repeated();
@@ -186,7 +187,7 @@ static void _json2field(Message &msg, const FieldDescriptor *field, json_t *jf)
 			Message *mf = (repeated)?
 				ref->AddMessage(&msg, field):
 				ref->MutableMessage(&msg, field);
-			_json2pb(*mf, jf);
+			_json2pb(*mf, jf, allow_unknown_field);
 			break;
 		}
 		case FieldDescriptor::CPPTYPE_ENUM: {
@@ -208,7 +209,7 @@ static void _json2field(Message &msg, const FieldDescriptor *field, json_t *jf)
 	}
 }
 
-static void _json2pb(Message& msg, json_t *root)
+static void _json2pb(Message& msg, json_t *root, bool allow_unknown_field)
 {
 	const Descriptor *d = msg.GetDescriptor();
 	const Reflection *ref = msg.GetReflection();
@@ -224,20 +225,26 @@ static void _json2pb(Message& msg, json_t *root)
 			field = ref->FindKnownExtensionByName(name);
 			//field = d->file()->FindExtensionByName(name);
 
-		if (!field) throw j2pb_error("Unknown field: " + std::string(name));
+		if (!field) {
+		    if (!allow_unknown_field) {
+		        throw j2pb_error("Unknown field: " + std::string(name));
+		    }
+		    else {
+		        continue;
+		    }
+		}
 
-		int r = 0;
 		if (field->is_repeated()) {
 			if (!json_is_array(jf))
 				throw j2pb_error(field, "Not array");
 			for (size_t j = 0; j < json_array_size(jf); j++)
-				_json2field(msg, field, json_array_get(jf, j));
+				_json2field(msg, field, json_array_get(jf, j), allow_unknown_field);
 		} else
-			_json2field(msg, field, jf);
+			_json2field(msg, field, jf, allow_unknown_field);
 	}
 }
 
-void json2pb(Message &msg, const char *buf, size_t size)
+void json2pb(Message &msg, const char *buf, size_t size, bool allow_unknown_field)
 {
 	json_t *root;
 	json_error_t error;
@@ -252,7 +259,7 @@ void json2pb(Message &msg, const char *buf, size_t size)
 	if (!json_is_object(root))
 		throw j2pb_error("Malformed JSON: not an object");
 
-	_json2pb(msg, root);
+	_json2pb(msg, root, allow_unknown_field);
 }
 
 int json_dump_std_string(const char *buf, size_t size, void *data)

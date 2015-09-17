@@ -16,7 +16,7 @@ class Message;
 }
 }
 
-void json2pb(google::protobuf::Message &msg, const char *buf, size_t size);
+void json2pb(google::protobuf::Message &msg, const char *buf, size_t size, bool allow_unknown_field = false);
 std::string pb2json(const google::protobuf::Message &msg);
 
 #endif//__JSON2PB_H__
